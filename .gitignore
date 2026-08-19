@@ -1,0 +1,4 @@
+__pycache__/
+metadata/git_commit.txt
+metadata/git_status.txt
+campaign_inputs.sha256

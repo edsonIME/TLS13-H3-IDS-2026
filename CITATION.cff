@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use this dataset or its generation pipeline, please cite the following."
+title: "TLS13-H3-IDS-2026: A Labelled Network Intrusion-Detection Dataset over TLS 1.3 and HTTP/3 with a Released Generation Pipeline"
+type: dataset
+authors:
+  - family-names: "Barbosa de Souza"
+    given-names: "Edson"
+    affiliation: "Instituto Militar de Engenharia (IME), Rio de Janeiro, Brazil"
+    orcid: "https://orcid.org/0009-0008-3405-0192"
+# Dataset DOI (Zenodo) — fill in after the Zenodo deposit is published:
+# doi: "10.5281/zenodo.<FILL-IN>"
+version: "1.0.0"
+date-released: "2026-08-<DD>"   # fill in the release date
+license: CC-BY-4.0              # data license; the code is released separately (see LICENSE)
+keywords:
+  - "network intrusion detection"
+  - "encrypted traffic classification"
+  - "TLS 1.3"
+  - "HTTP/3"
+  - "QUIC"
+  - "dataset"
+  - "reproducibility"
+  - "adversarial robustness"
+abstract: >-
+  TLS13-H3-IDS-2026 is a labelled network intrusion-detection dataset captured
+  on a physically air-gapped four-host testbed in which web services are
+  delivered exclusively over TLS 1.3 and HTTP/3. Benign traffic is produced by
+  a suite of non-browser Python HTTP clients; the attacks comprise network
+  reconnaissance, application-layer credential brute-forcing, and HTTP/3
+  flooding denial-of-service directed at the encrypted services. Both TCP
+  (TLS 1.3) and QUIC/HTTP-3 carry benign and malicious traffic, so attacks
+  cannot be separated by transport alone. Ground truth is effect-verified,
+  leakage is precluded by construction and by an enforced temporal partition,
+  and the entire generation pipeline is released with per-run cryptographic
+  provenance. The corpus comprises 153,193 labelled flows across seven attack
+  runs.
+

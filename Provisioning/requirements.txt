@@ -1,0 +1,26 @@
+# Python dependencies for the project scripts. Install with:
+#   pip install -r requirements.txt        (or: pip install -e .  — see pyproject.toml)
+# Ranges below keep it INSTALLABLE, but do NOT reproduce results exactly.
+#
+# For a PUBLICATION, freeze exact versions and record them alongside the run
+# provenance [audit 21]:
+#   pip freeze > requirements.lock          # exact package versions
+#   plus, in your paper's artifacts: Docker image digests (docker images --digests),
+#   Zeek version + JA3 plugin version, and the git commit
+#   (also captured in <prefix>_split_provenance.json).
+#
+# ---- Analysis / labelling / benchmark stack (all hosts that process flows) ----
+numpy>=1.26,<3
+pandas>=2.1,<3
+scipy>=1.11,<2
+scikit-learn>=1.4,<2
+#
+# ---- Benign traffic generator (NB2 only): the non-browser Python clients ----
+# benign_clients.py exercises these five profiles: aioquic-h3, httpx, requests,
+# httpx-session, requests-session. On the bench they were installed on NB2 with
+#   pip install aioquic httpx requests
+# (there is NO Selenium / browser dependency: the seven released runs are
+# entirely non-browser; the wrapper restricts execution to the profiles above).
+aioquic>=1.0,<2
+httpx>=0.27,<1
+requests>=2.31,<3

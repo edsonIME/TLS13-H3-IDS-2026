@@ -1,0 +1,539 @@
+#!/usr/bin/env python3
+"""
+lab_common.py - shared constants and helpers for the testbed provisioners.
+
+The four configure_nbX.py scripts import this module. It keeps the lab
+addressing plan in one place and wraps the OS-specific commands (Windows
+netsh / certutil / w32tm / wsl / winget and the WSL/Ubuntu apt side) behind
+small, idempotent, dry-run-aware helpers.
+
+Design goals
+    * Single source of truth for IPs / hostnames (edit HERE, not in four files).
+    * Idempotent: safe to run repeatedly; steps check current state where they can.
+    * Dry-run: `--dry-run` prints every command WITHOUT changing anything, so the
+      plan can be reviewed on any machine (even non-Windows) before executing.
+    * All orchestration is Python; OS commands are shelled out via subprocess.
+
+Prerequisite on each Windows host: Python 3 (e.g. `winget install -e --id
+Python.Python.3.12`). Run the scripts from an ELEVATED PowerShell.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ctypes
+import os
+import subprocess
+import sys
+
+# True only on a real Windows host. On Linux/macOS the scripts still run in
+# --dry-run so the plan can be reviewed anywhere.
+IS_WINDOWS = os.name == "nt"
+
+# ---------------------------------------------------------------------------
+# Lab addressing plan (single source of truth). Override per-run with CLI flags.
+# ---------------------------------------------------------------------------
+SUBNET_MASK = "255.255.255.0"
+SUBNET_CIDR = "10.10.10.0/24"
+SERVER_IP = "10.10.10.11"           # NB1 hosts DNS (dnsmasq) + NTP (chrony)
+ROLE_IP = {                         # static IPv4 for each role's Ethernet NIC
+    "nb1": "10.10.10.11",
+    "nb2": "10.10.10.20",
+    "nb3": "10.10.10.30",
+    "nb4": None,                    # sensor: the mirror port is promiscuous / no IP
+}
+HOSTNAMES = ["blog.lab", "shop.lab"]    # both resolve to SERVER_IP
+WSL_DISTRO = "Ubuntu"
+
+
+class Ctx:
+    """Execution context shared by every helper."""
+
+    def __init__(self, dry_run: bool, assume_yes: bool, nic: str, distro: str):
+        self.dry_run = dry_run
+        self.assume_yes = assume_yes
+        self.nic = nic
+        self.distro = distro
+
+
+# ---- logging --------------------------------------------------------------
+def log(msg: str, level: str = "INFO") -> None:
+    print(f"[{level}] {msg}", flush=True)
+
+
+def step(title: str) -> None:
+    log("---- " + title, "STEP")
+
+
+def confirm(ctx: "Ctx", prompt: str) -> bool:
+    """Ask for confirmation unless --yes or --dry-run was given."""
+    if ctx.dry_run or ctx.assume_yes:
+        return True
+    return input(f"{prompt} [y/N] ").strip().lower() == "y"
+
+
+# ---- command execution ----------------------------------------------------
+def run(cmd, ctx: "Ctx", check: bool = True, capture: bool = False) -> str:
+    """Run a local command given as a list. In dry-run, only print it."""
+    printable = " ".join(cmd)
+    log(("DRY  " if ctx.dry_run else "RUN  ") + printable)
+    if ctx.dry_run:
+        return ""
+    res = subprocess.run(cmd, text=True, capture_output=capture)
+    if check and res.returncode != 0:
+        detail = (res.stderr or "").strip() if capture else ""
+        raise RuntimeError(f"command failed ({res.returncode}): {printable}\n{detail}")
+    return (res.stdout or "") if capture else ""
+
+
+def run_wsl(bash: str, ctx: "Ctx", root: bool = True, check: bool = True) -> str:
+    """Run a bash snippet inside the WSL distro (as root by default, for apt)."""
+    snippet = bash.strip()
+    user = ["-u", "root"] if root else []
+    cmd = ["wsl", "-d", ctx.distro] + user + ["--", "bash", "-lc", snippet]
+    # log the bash faithfully (one line per line) so continuations/comments read right
+    log(("DRY  " if ctx.dry_run else "RUN  ") + f"wsl[{ctx.distro}] bash -lc:")
+    for line in snippet.splitlines():
+        print("        " + line)
+    if ctx.dry_run:
+        return ""
+    res = subprocess.run(cmd, text=True, capture_output=True)
+    if res.stdout:
+        sys.stdout.write(res.stdout)
+    if check and res.returncode != 0:
+        raise RuntimeError(f"wsl command failed ({res.returncode}):\n{res.stderr}")
+    return res.stdout
+
+
+# ---- Windows guards -------------------------------------------------------
+def is_admin() -> bool:
+    if not IS_WINDOWS:
+        return True
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def require_windows(ctx: "Ctx") -> None:
+    if not IS_WINDOWS and not ctx.dry_run:
+        log("Run this on the Windows host. Use --dry-run to preview elsewhere.", "FATAL")
+        sys.exit(1)
+
+
+def require_admin(ctx: "Ctx") -> None:
+    if ctx.dry_run:
+        return
+    if IS_WINDOWS and not is_admin():
+        log("Must run in an ELEVATED PowerShell (Run as administrator).", "FATAL")
+        sys.exit(1)
+
+
+# ---- Windows network ------------------------------------------------------
+def detect_ethernet(ctx: "Ctx") -> str:
+    """Best-effort auto-detect of the connected physical Ethernet adapter name."""
+    if ctx.nic:                       # explicit --nic override wins
+        return ctx.nic
+    if not IS_WINDOWS or ctx.dry_run:
+        return "Ethernet"
+    ps = ("Get-NetAdapter -Physical | Where-Object {$_.Status -eq 'Up' -and "
+          "$_.PhysicalMediaType -like '*802.3*'} | "
+          "Select-Object -First 1 -ExpandProperty Name")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                             text=True, capture_output=True)
+        name = out.stdout.strip().splitlines()[0] if out.stdout.strip() else ""
+        return name or "Ethernet"
+    except Exception:
+        return "Ethernet"
+
+
+def set_static_ip(nic: str, ip: str, ctx: "Ctx") -> None:
+    step(f"Static IPv4 {ip}/{SUBNET_MASK} on '{nic}' (no gateway - air-gapped)")
+    run(["netsh", "interface", "ip", "set", "address",
+         f"name={nic}", "static", ip, SUBNET_MASK], ctx)
+
+
+def set_dns(nic: str, dns: str, ctx: "Ctx") -> None:
+    step(f"DNS {dns} on '{nic}'")
+    run(["netsh", "interface", "ip", "set", "dns",
+         f"name={nic}", "static", dns], ctx)
+
+
+def firewall_allow(name: str, proto: str, port: int, ctx: "Ctx") -> None:
+    """Add an inbound allow rule (idempotent: delete same-named rule first)."""
+    step(f"Firewall inbound allow {proto}/{port} ({name})")
+    run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={name}"],
+        ctx, check=False)
+    run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={name}",
+         "dir=in", "action=allow", f"protocol={proto}", f"localport={port}"], ctx)
+
+
+# ---- WSL ------------------------------------------------------------------
+def ensure_wsl(ctx: "Ctx") -> None:
+    """Make sure WSL2 and the target distro are installed."""
+    step(f"Ensure WSL2 + {ctx.distro}")
+    if ctx.dry_run:
+        run(["wsl", "--install", "-d", ctx.distro], ctx)
+        return
+    installed = ""
+    if IS_WINDOWS:
+        try:
+            # `wsl -l -q` output is UTF-16; decode leniently
+            raw = subprocess.run(["wsl", "-l", "-q"], capture_output=True).stdout
+            installed = raw.decode("utf-16-le", "ignore") + raw.decode("utf-8", "ignore")
+        except Exception:
+            installed = ""
+    if ctx.distro.lower() not in installed.lower():
+        run(["wsl", "--install", "-d", ctx.distro], ctx)
+        # A fresh WSL install needs a REBOOT before the distro is usable, so we
+        # STOP here rather than run WSL commands that would fail.
+        log("WSL/Ubuntu was just installed. REBOOT now, finish the Ubuntu first-run "
+            "(create the user), then re-run this script.", "FATAL")
+        sys.exit(2)
+    else:
+        log(f"{ctx.distro} already present.")
+
+
+def write_wslconfig_mirrored(ctx: "Ctx") -> None:
+    """Enable mirrored networking so WSL shares the host LAN identity."""
+    step("WSL mirrored networking (%UserProfile%\\.wslconfig)")
+    content = "[wsl2]\nnetworkingMode=mirrored\n"
+    path = (os.path.expandvars(r"%UserProfile%\.wslconfig")
+            if IS_WINDOWS else "/tmp/wslconfig.preview")
+    log(("DRY  " if ctx.dry_run else "RUN  ") + f"write {path} -> {content!r}")
+    if not ctx.dry_run:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        run(["wsl", "--shutdown"], ctx, check=False)
+
+
+def wsl_enable_systemd(ctx: "Ctx") -> None:
+    """Enable systemd inside WSL so dnsmasq/chrony run as services."""
+    step("Enable systemd in WSL (/etc/wsl.conf)")
+    run_wsl(
+        "grep -q 'systemd=true' /etc/wsl.conf 2>/dev/null "
+        "|| printf '[boot]\\nsystemd=true\\n' >> /etc/wsl.conf", ctx)
+    run(["wsl", "--shutdown"], ctx, check=False)
+
+
+def wsl_apt_install(pkgs, ctx: "Ctx") -> None:
+    step("apt install (WSL): " + " ".join(pkgs))
+    run_wsl("apt-get update && DEBIAN_FRONTEND=noninteractive "
+            "apt-get install -y " + " ".join(pkgs), ctx)
+
+
+def wsl_install_zeek(ctx: "Ctx") -> None:
+    """Zeek is not in the default Ubuntu repos - add the official OBS repo."""
+    step("Install Zeek + zkg (OBS repo) in WSL")
+    run_wsl(r"""
+set -e
+. /etc/os-release
+REPO="xUbuntu_${VERSION_ID}"
+apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y curl gnupg
+echo "deb https://ftp.gwdg.de/pub/opensuse/repositories/security%3A/zeek/xUbuntu_24.04/ /" > /etc/apt/sources.list.d/security-zeek.list
+curl -fsSL "https://ftp.gwdg.de/pub/opensuse/repositories/security%3A/zeek/xUbuntu_24.04/Release.key" -o /tmp/security-zeek.key
+gpg --dearmor < /tmp/security-zeek.key > /etc/apt/trusted.gpg.d/security-zeek.gpg
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y zeek zkg
+# expose /opt/zeek/bin for interactive shells
+grep -q '/opt/zeek/bin' /etc/profile.d/zeek.sh 2>/dev/null \
+  || echo 'export PATH=$PATH:/opt/zeek/bin' > /etc/profile.d/zeek.sh
+""", ctx)
+
+
+def wsl_chrony_client(ctx: "Ctx") -> None:
+    step(f"chrony client -> {SERVER_IP}")
+    run_wsl(f"""
+grep -q '^server {SERVER_IP} iburst' /etc/chrony/chrony.conf \
+  || echo 'server {SERVER_IP} iburst' >> /etc/chrony/chrony.conf
+systemctl restart chrony 2>/dev/null || service chrony restart 2>/dev/null || true
+""", ctx)
+
+
+def wsl_install_project(wsl_path: str, ctx: "Ctx") -> None:
+    """Install the ProjetoDataset package inside WSL from a WSL-visible path.
+
+    `wsl_path` must be a path the distro can see, e.g. `~/ProjetoDataset`
+    or `/mnt/c/nids/ProjetoDataset`.
+    """
+    step(f"Install ProjetoDataset in WSL (pip install -e .) from {wsl_path}")
+    # Run as the DEFAULT WSL user (root=False) so the venv lands in the user's
+    # home (~/nids-env) and is usable interactively later — NOT in /root.
+    run_wsl(f"""
+set -e
+TARGET="{wsl_path}"
+cd "${{TARGET/#\\~/$HOME}}"    # expand a leading ~ while still allowing spaces
+python3 -m venv ~/nids-env
+. ~/nids-env/bin/activate
+pip install -e . || pip install -r requirements.txt
+""", ctx, root=False)
+
+
+# ---- Native Linux (Ubuntu) helpers ----------------------------------------
+# Used by machines that run Ubuntu natively (e.g. NB3). Run those scripts ON
+# the Ubuntu box WITH SUDO.
+def is_root() -> bool:
+    return getattr(os, "geteuid", lambda: 0)() == 0
+
+
+def require_linux(ctx: "Ctx") -> None:
+    if IS_WINDOWS and not ctx.dry_run:
+        log("Run this ON the Ubuntu machine (not Windows). Use --dry-run to preview.", "FATAL")
+        sys.exit(1)
+
+
+def require_root(ctx: "Ctx") -> None:
+    if ctx.dry_run:
+        return
+    if not IS_WINDOWS and not is_root():
+        log("Run with sudo (root is needed for netplan / apt).", "FATAL")
+        sys.exit(1)
+
+
+def detect_linux_iface(ctx: "Ctx", override=None) -> str:
+    """Pick the wired interface (skip lo, wireless wl*, and virtual ifaces)."""
+    if override:
+        return override
+    if IS_WINDOWS or ctx.dry_run:
+        return "enp2s0"
+    try:
+        out = subprocess.run(["ip", "-br", "link"], text=True, capture_output=True).stdout
+        for line in out.splitlines():
+            name = line.split()[0]
+            if name == "lo" or name.startswith(("wl", "docker", "veth", "br-", "virbr")):
+                continue
+            return name
+    except Exception:
+        pass
+    return "eth0"
+
+
+def linux_netplan_static(iface: str, ip: str, dns: str, ctx: "Ctx") -> None:
+    step(f"netplan static {ip}/24 on {iface} (DNS {dns}, no gateway)")
+    yaml = (
+        "network:\n"
+        "  version: 2\n"
+        "  ethernets:\n"
+        f"    {iface}:\n"
+        "      dhcp4: false\n"
+        f"      addresses: [{ip}/24]\n"
+        "      nameservers:\n"
+        f"        addresses: [{dns}]\n"
+        "      # no gateway - air-gapped lab\n"
+    )
+    path = "/etc/netplan/01-lab.yaml"
+    log(("DRY  " if ctx.dry_run else "RUN  ") + f"write {path}:")
+    for ln in yaml.splitlines():
+        print("        " + ln)
+    if not ctx.dry_run:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(yaml)
+        os.chmod(path, 0o600)          # netplan warns on world-readable files
+        run(["netplan", "apply"], ctx)
+
+
+def linux_apt_install(pkgs, ctx: "Ctx") -> None:
+    step("apt install: " + " ".join(pkgs))
+    run(["apt-get", "update"], ctx)
+    run(["apt-get", "install", "-y"] + list(pkgs), ctx)
+
+
+def linux_chrony_client(ctx: "Ctx") -> None:
+    step(f"chrony client -> {SERVER_IP}")
+    conf = "/etc/chrony/chrony.conf"
+    line = f"server {SERVER_IP} iburst"
+    log(("DRY  " if ctx.dry_run else "RUN  ")
+        + f"ensure '{line}' in {conf}; restart chrony")
+    if not ctx.dry_run:
+        try:
+            existing = open(conf, encoding="utf-8").read()
+        except FileNotFoundError:
+            existing = ""
+        if line not in existing:
+            with open(conf, "a", encoding="utf-8") as fh:
+                fh.write("\n" + line + "\n")
+        run(["systemctl", "restart", "chrony"], ctx, check=False)
+
+
+def linux_install_project(path: str, ctx: "Ctx") -> None:
+    """Create a venv and `pip install -e .` as the LOGIN user (not root)."""
+    user = os.environ.get("SUDO_USER")
+    if path.startswith("~") and user:            # expand ~ to the real user home
+        path = f"/home/{user}" + path[1:]
+    step(f"Install ProjetoDataset (pip install -e .) from {path}")
+    inner = (f'cd "{path}" && python3 -m venv ~/nids-env && '
+             '. ~/nids-env/bin/activate && '
+             '(pip install -e . || pip install -r requirements.txt)')
+    if user:
+        run(["sudo", "-u", user, "bash", "-lc", inner], ctx, check=False)
+    else:
+        run(["bash", "-lc", inner], ctx, check=False)
+
+
+def run_bash(snippet: str, ctx: "Ctx", check: bool = True) -> str:
+    """Run a bash snippet natively (Linux). Faithful multi-line logging."""
+    snippet = snippet.strip()
+    log(("DRY  " if ctx.dry_run else "RUN  ") + "bash -lc:")
+    for line in snippet.splitlines():
+        print("        " + line)
+    if ctx.dry_run:
+        return ""
+    res = subprocess.run(["bash", "-lc", snippet], text=True, capture_output=True)
+    if res.stdout:
+        sys.stdout.write(res.stdout)
+    if check and res.returncode != 0:
+        raise RuntimeError(f"bash failed ({res.returncode}):\n{res.stderr}")
+    return res.stdout
+
+
+def linux_install_docker(ctx: "Ctx") -> None:
+    """Install Docker CE + the compose plugin from Docker's official repo."""
+    step("Install Docker CE + compose plugin (official repo)")
+    run_bash(r"""
+set -e
+install -m 0755 -d /etc/apt/keyrings
+if [ ! -f /etc/apt/keyrings/docker.asc ]; then
+  apt-get update && apt-get install -y ca-certificates curl
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+fi
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+""", ctx)
+    user = os.environ.get("SUDO_USER")
+    if user:
+        run(["usermod", "-aG", "docker", user], ctx, check=False)
+        log(f"Added {user} to the docker group (log out/in for it to take effect).", "WARN")
+
+
+def linux_dns_server(ctx: "Ctx") -> None:
+    """dnsmasq resolves blog.lab/shop.lab -> SERVER_IP; the host uses it too.
+
+    On this air-gapped DNS box we own resolution locally: systemd-resolved is
+    disabled to free port 53 and /etc/resolv.conf points at dnsmasq.
+    """
+    step(f"DNS server (dnsmasq): {' / '.join(HOSTNAMES)} -> {SERVER_IP}")
+    addrs = "\n".join(f"address=/{h}/{SERVER_IP}" for h in HOSTNAMES)
+    # NOTE: the dnsmasq package is installed earlier (while online). This step is
+    # CONFIG-ONLY and cuts off internet DNS, so it runs LAST (isolated phase).
+    run_bash(f"""
+set -e
+systemctl disable --now systemd-resolved 2>/dev/null || true
+rm -f /etc/resolv.conf
+echo 'nameserver 127.0.0.1' > /etc/resolv.conf
+cat > /etc/dnsmasq.d/lab.conf <<'EOF'
+no-resolv
+no-hosts
+{addrs}
+EOF
+systemctl enable dnsmasq
+systemctl restart dnsmasq
+""", ctx)
+
+
+def linux_chrony_server(ctx: "Ctx") -> None:
+    """chrony as an NTP server for the lab subnet."""
+    step(f"chrony NTP server for {SUBNET_CIDR}")
+    # chrony package installed earlier; this is config-only.
+    run_bash(f"""
+set -e
+CONF=/etc/chrony/chrony.conf
+grep -q '^allow {SUBNET_CIDR}' $CONF || echo 'allow {SUBNET_CIDR}' >> $CONF
+grep -q '^local stratum 10' $CONF || echo 'local stratum 10' >> $CONF
+systemctl restart chrony
+""", ctx)
+
+
+def linux_ufw_allow_lab(ctx: "Ctx") -> None:
+    """Open the lab ports, but only if ufw is actually active (off by default)."""
+    step("ufw: allow lab ports (only if ufw is active)")
+    run_bash("""
+if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
+  ufw allow 443/tcp; ufw allow 443/udp; ufw allow 53/tcp; ufw allow 53/udp; ufw allow 123/udp
+else
+  echo "ufw inactive (Ubuntu default) - nothing to open"
+fi
+""", ctx)
+
+
+# ---- winget (Windows package installs) ------------------------------------
+def winget_install(pkg_id: str, ctx: "Ctx", present_cmd=None) -> None:
+    """Install a winget package if `present_cmd` is not already satisfied."""
+    step(f"winget install {pkg_id}")
+    if present_cmd and not ctx.dry_run and IS_WINDOWS:
+        try:
+            probe = subprocess.run(present_cmd, capture_output=True)
+            if probe.returncode == 0:
+                log(f"{pkg_id} already present; skipping.")
+                return
+        except Exception:
+            pass
+    run(["winget", "install", "-e", "--id", pkg_id,
+         "--accept-source-agreements", "--accept-package-agreements"],
+        ctx, check=False)
+
+
+# ---- verification (fail-closed) -------------------------------------------
+def final_checks(items, ctx: "Ctx") -> bool:
+    """Run post-install checks. items = list of (label, argv, critical:bool).
+
+    Returns True only if every CRITICAL check passed. In dry-run it just lists
+    what it would verify and returns True.
+    """
+    step("Final verification")
+    if ctx.dry_run:
+        for label, argv, _crit in items:
+            log(f"would verify: {label}")
+        return True
+    ok_all = True
+    for label, argv, crit in items:
+        try:
+            rc = subprocess.run(argv, capture_output=True).returncode
+        except Exception:
+            rc = 1
+        good = rc == 0
+        log(f"[{'OK  ' if good else 'FAIL'}] {label}", "INFO" if good else "WARN")
+        if crit and not good:
+            ok_all = False
+    return ok_all
+
+
+def windows_disable_nic_ip(nic: str, ctx: "Ctx") -> None:
+    """Remove the IPv4/IPv6 stack from the CAPTURE NIC (Npcap still sees frames
+    below the IP layer). Keeps the sensor silent on the mirror port."""
+    step(f"Disable IPv4/IPv6/DHCP on capture NIC '{nic}'")
+    ps = (f"Disable-NetAdapterBinding -Name '{nic}' -ComponentID ms_tcpip,ms_tcpip6 "
+          f"-PassThru | Format-Table Name,ComponentID,Enabled")
+    run(["powershell", "-NoProfile", "-Command", ps], ctx, check=False)
+    log("Verify with: Get-NetAdapterBinding -Name '<nic>' (ms_tcpip* must be False).", "INFO")
+
+
+# ---- CLI ------------------------------------------------------------------
+def common_parser(description: str) -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description=description,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--dry-run", action="store_true",
+                   help="print every action without changing anything")
+    p.add_argument("--yes", action="store_true",
+                   help="do not prompt for confirmation")
+    p.add_argument("--nic", default=None,
+                   help="Ethernet adapter name (auto-detected if omitted)")
+    p.add_argument("--distro", default=WSL_DISTRO, help="WSL distro name")
+    p.add_argument("--project", default=None,
+                   help="path to ProjetoDataset to also 'pip install -e .' "
+                        "(Linux: ~/ProjetoDataset; NB4 = a WSL path e.g. /mnt/c/nids/ProjetoDataset)")
+    p.add_argument("--no-network", action="store_true",
+                   help="INSTALL ONLY: skip the isolated IP/DNS step (keeps internet; "
+                        "apply the network later). Packages are always installed first.")
+    return p
+
+
+def make_ctx(args) -> "Ctx":
+    return Ctx(dry_run=args.dry_run, assume_yes=args.yes,
+               nic=args.nic, distro=args.distro)

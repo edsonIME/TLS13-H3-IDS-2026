@@ -1,0 +1,52 @@
+# pyproject.toml — makes the pipeline installable so feature_schema.py is always
+# importable by label_flows/merge/validate/evaluate on any machine (no more
+# ModuleNotFoundError when you copy only some scripts) [audit 9].
+#
+#   cd ProjetoDataset && pip install -e .
+#
+# The scripts live in src/ and import each other as top-level modules, so src/ is
+# added to the path via [tool.setuptools] below.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nids-encrypted-dataset"
+version = "0.17.21"
+description = "Encrypted-traffic NIDS dataset toolkit (HIKARI-inspired, air-gapped testbed)"
+requires-python = ">=3.9"
+# Ranges keep it installable; for a PUBLICATION pin exact versions in a lock file
+# (pip freeze > requirements.lock) and record image digests / tool versions in the
+# split provenance JSON [audit 21].
+#
+# NOTE: the benign traffic generator (benign_clients.py, NB2) is non-browser and
+# depends on aioquic / httpx / requests. There is NO Selenium dependency: the
+# seven released runs are entirely non-browser (an earlier Selenium generator was
+# replaced). On the bench the client deps were installed with
+#   pip install aioquic httpx requests
+dependencies = [
+    "numpy>=1.26,<3",
+    "pandas>=2.1,<3",
+    "scipy>=1.11,<2",
+    "scikit-learn>=1.4,<2",
+    "aioquic>=1.0,<2",
+    "httpx>=0.27,<1",
+    "requests>=2.31,<3",
+]
+
+[tool.setuptools]
+# The scripts are flat modules under src/; expose them as importable modules.
+py-modules = [
+    "versions", "feature_schema", "flowmeter_schema", "campaign", "attack_scenarios", "provenance", "label_flows",
+    "merge_and_split", "validate_dataset", "evaluate_realism", "synth_nids_dataset",
+    # benign traffic generator (non-browser): the wrapper + the client suite + the H3 worker
+    "benign_traffic", "benign_clients", "h3_get",
+    # attack tooling
+    "run_attacks", "h3_flood", "http_flood",
+    "seed_content", "correlate_ground_truth",
+    # lab automation layer (capture / orchestration / monitoring) -- audit v20.26
+    "runlib", "clock_evidence", "capture_run", "process_pcap", "service_monitor",
+    "preflight", "finalize_run", "orchestrate_run", "orchestrate_campaign",
+    "verify_switch_mirroring",
+]
+package-dir = {"" = "src"}

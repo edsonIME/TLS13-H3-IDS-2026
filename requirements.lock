@@ -1,0 +1,8 @@
+# requirements.lock — EXACT versions used to produce/verify the artifacts.
+# Regenerate with: pip freeze > requirements.lock  (in your own env).
+# These are the versions the test suite was validated against.
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+scikit-learn==1.7.2
+# selenium (not installed in this env)

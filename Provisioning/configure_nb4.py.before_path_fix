@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""
+configure_nb4.py - provisioner for NB4 (passive sensor) — Windows + Npcap path.
+
+Machine: Acer Aspire E5-573 ("Secs", 1.35 TB), mirror destination port P4.
+
+SCOPE: this script automates ONLY the Windows/Npcap capture path (Npcap +
+dumpcap capture on Windows; Zeek in WSL2 processes the PCAP). The guide's
+RECOMMENDED path — a bridged Ubuntu VM in promiscuous mode — is a Linux install
+and is NOT provisioned here (do it in the VM).
+
+Capture facts:
+  * WSL2 CANNOT sniff the physical mirror NIC. On this path CAPTURE is done with
+    dumpcap on WINDOWS; WSL2 only PROCESSES the .pcap (Zeek) via /mnt/c/...
+  * Npcap PCAP timestamps come from the WINDOWS clock -> sync it to NB1 (needs a
+    management link; the mirror port has no IP).
+
+Flags:
+  --capture-nic "<name>"  the mirror NIC: its IPv4/IPv6 is DISABLED (silent sensor) — REQUIRED
+  --project <WSL path>    e.g. /mnt/c/nids/ProjetoDataset  (installs the venv in WSL)
+  --nic "<name>" --mgmt-ip <ip>   optional management link (for time sync; both together)
+
+Run from an ELEVATED PowerShell (--dry-run previews; a real run needs --capture-nic):
+    py configure_nb4.py --capture-nic "Ethernet" --project /mnt/c/nids/ProjetoDataset --dry-run
+    py configure_nb4.py --capture-nic "Ethernet" --project /mnt/c/nids/ProjetoDataset
+    # with a separate management link (time sync): add  --nic "Ethernet 2" --mgmt-ip 10.10.10.4
+"""
+
+import sys
+import lab_common as L
+
+
+def main() -> int:
+    p = L.common_parser(__doc__)
+    p.add_argument("--mgmt-ip", default=None, help="management IPv4 on a SEPARATE NIC (needs --nic)")
+    p.add_argument("--capture-nic", default=None, help="mirror NIC name to strip of IPv4/IPv6 — REQUIRED")
+    args = p.parse_args()
+    ctx = L.make_ctx(args)
+    L.require_windows(ctx)
+    L.require_admin(ctx)
+    # flag-combo guards (valid to fire even in dry-run):
+    if args.mgmt_ip and not args.nic:
+        L.log("--mgmt-ip requires an explicit --nic (so the capture port is never touched).", "FATAL")
+        return 1
+    if args.nic and args.capture_nic and args.nic.strip().lower() == args.capture_nic.strip().lower():
+        L.log("--nic (management) must DIFFER from --capture-nic (the mirror port stays IP-less).", "FATAL")
+        return 1
+    # missing-required is enforced on REAL runs only; --dry-run always previews:
+    if not ctx.dry_run and not args.no_network and not args.capture_nic:
+        L.log("--capture-nic \"<mirror NIC>\" is required (to strip its IPv4/IPv6). "
+              "Use --no-network to install only.", "FATAL")
+        return 1
+    if not ctx.dry_run and not args.project:
+        L.log("Sem --project: o projeto precisa JA estar instalado no WSL (~/nids-env) — a "
+              "verificacao final confere e FALHA se nao estiver. Passe --project <WSL path>.", "WARN")
+    if not L.confirm(ctx, "Configure THIS machine as NB4 (sensor, Windows/Npcap path)?"):
+        L.log("aborted by user")
+        return 1
+
+    # ===== INSTALL PHASE (needs internet) =====
+    L.ensure_wsl(ctx)              # exits and asks for a reboot on a fresh WSL install
+    L.wsl_enable_systemd(ctx)
+    L.winget_install("WiresharkFoundation.Wireshark", ctx, present_cmd=["where", "dumpcap"])
+    L.log("If prompted, install Npcap in WinPcap-compatible mode.", "WARN")
+    L.wsl_apt_install(["tcpdump", "chrony", "python3-venv", "python3-pip", "git"], ctx)
+    L.wsl_install_zeek(ctx)        # Zeek + zkg from the official OBS repo
+    L.step("zkg: configure + install the ja3 package (JA3/JA3S TLS evidence)")
+    L.run_wsl("export PATH=$PATH:/opt/zeek/bin; zkg autoconfig || true; "
+              "zkg install --force ja3 || true", ctx)
+    if args.project:
+        L.wsl_install_project(args.project, ctx)
+
+    # ===== VERIFY INSTALLS (fail-closed on the essentials) =====
+    checks = [
+        ("Zeek present in WSL", ["wsl", "-d", ctx.distro, "--", "bash", "-lc",
+                                 "command -v zeek || test -x /opt/zeek/bin/zeek"], True),
+        ("tcpdump present in WSL", ["wsl", "-d", ctx.distro, "--", "bash", "-lc", "command -v tcpdump"], True),
+        ("ja3 package installed (zkg)", ["wsl", "-d", ctx.distro, "--", "bash", "-lc",
+                                         "PATH=$PATH:/opt/zeek/bin zkg list 2>/dev/null | grep -qi ja3"], True),
+        ("Npcap functional (dumpcap -D)", ["powershell", "-NoProfile", "-Command",
+            "$d=(Get-Command dumpcap -EA SilentlyContinue).Source; "
+            "if(-not $d){$d='C:\\Program Files\\Wireshark\\dumpcap.exe'}; "
+            "if(-not (Test-Path $d)){exit 1}; & $d -D > $null 2>&1; exit $LASTEXITCODE"], True),
+    ]
+    # Verify the project in the WSL venv (~/nids-env) whenever --project was requested
+    # (confirm it actually installed) OR the network will be isolated. Bare --no-network
+    # without --project skips it (verify on the real run).
+    if args.project or not args.no_network:
+        checks.append(("project installed in WSL (pip show)", ["wsl", "-d", ctx.distro, "--", "bash", "-lc",
+                                                                "~/nids-env/bin/pip show nids-encrypted-dataset >/dev/null"], True))
+    if not L.final_checks(checks, ctx):
+        L.log("PROVISIONING INCOMPLETE — a critical check FAILED (see the [FAIL] lines above: "
+              "Zeek/tcpdump/ja3/dumpcap and/or the project). Network NOT changed.", "FATAL")
+        return 1
+
+    # ===== NETWORK / TIME PHASE (last) =====
+    if args.no_network:
+        L.log("--no-network: install done, capture NIC / clock unchanged.", "OK")
+        return 0
+    L.windows_disable_nic_ip(args.capture_nic, ctx)   # silence the mirror port (required)
+    if not L.final_checks([
+        ("capture NIC IPv4+IPv6 disabled", ["powershell", "-NoProfile", "-Command",
+            f"$b = Get-NetAdapterBinding -Name '{args.capture_nic}' -ComponentID ms_tcpip,ms_tcpip6 -EA Stop; "
+            f"if ($b | Where-Object Enabled) {{exit 1}} else {{exit 0}}"], True)], ctx):
+        L.log("Capture NIC still has IPv4/IPv6 bound — fix and re-run.", "FATAL")
+        return 1
+    if args.mgmt_ip:
+        L.set_static_ip(args.nic, args.mgmt_ip, ctx)
+        L.step(f"Sync the WINDOWS clock to NB1 ({L.SERVER_IP}) — Npcap stamps with it")
+        L.run(["w32tm", "/config", f"/manualpeerlist:{L.SERVER_IP},0x8",
+               "/syncfromflags:manual", "/update"], ctx, check=False)
+        L.run(["w32tm", "/resync"], ctx, check=False)
+        L.wsl_chrony_client(ctx)   # for the VM/processing path
+    else:
+        L.log("No --mgmt-ip: NB4 has no live path to NB1 for time. The Windows clock (which "
+              "stamps Npcap) must be PRE-SYNCED to NB1 and then confirmed in the preflight. "
+              "See guide section 11.", "WARN")
+
+    L.log("NB4 provisioning done.", "OK")
+    cap = args.capture_nic or "<mirror NIC>"
+    if args.project:
+        proc = f"source ~/nids-env/bin/activate && cd {args.project}"
+    else:
+        proc = "# install the project in WSL first (or re-run with --project), then activate its venv"
+    print(f"""
+Next (guide section 9 / Anexo B.4):
+  # CAPTURE (Windows/Npcap path) — dumpcap writes the PCAP on Windows:
+  dumpcap -i "{cap}" -w C:\\nids\\run0\\run0.pcap        # start BEFORE the run; Ctrl-C after
+  # (VM path instead: sudo tcpdump -i <iface> -s 0 -w run0.pcap in the bridged VM)
+  # PROCESS in WSL — activate the venv and cd to the project first:
+  wsl -d {ctx.distro}
+  {proc}
+  python3 src/process_pcap.py --run-dir /mnt/c/nids/run0 --run-id 0 --attempt-id <ID> --zeek
+  python3 src/verify_switch_mirroring.py --conn /mnt/c/nids/run0/zeek/conn.log \\
+    --client-ip 10.10.10.20 --victim-ip 10.10.10.11 --tcp-port 443 --udp-port 443
+""")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,48 @@
+# Example GitHub Actions CI for the NIDS dataset toolkit [audit residual].
+#
+# THREE independent jobs — unit / integration / ml — so no single job runs the whole
+# suite as one block. Each job has its own `timeout-minutes`; the `ml` job (RandomForest
+# baselines) is the heavy one. Every test starts its subprocesses in their own process
+# group via tests/test_pipeline.py::_run() (SIGKILL on timeout), and the integration/ml
+# jobs run with --isolated, so EACH test runs in a FRESH interpreter (subprocess) and its
+# threads/pools/fds are reclaimed on exit — a lane never accumulates resources or fails to
+# terminate [audit v20 P1-16 / v20.4]. (--isolated is cross-platform; --forked is a POSIX-only
+# os.fork alternative.)
+#
+# Copy to .github/workflows/tests.yml to use.
+
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5              # pure in-process tests; should be seconds
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python3 tests/test_pipeline.py --only unit --durations 15
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30             # spawns scripts as subprocesses; --isolated adds interpreter
+                                    # startup per test, so give it room [audit v20.7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python3 tests/test_pipeline.py --only integration --isolated --durations 15
+
+  ml:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30             # trains RandomForest baselines (validate/evaluate)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python3 tests/test_pipeline.py --only ml --isolated --durations 15

@@ -1,0 +1,183 @@
+{
+  "campaign_id": "nids4d-20260803",
+  "expected_labels": [
+    "BENIGN",
+    "PortScan",
+    "BruteForce",
+    "DoS"
+  ],
+  "reserved_test_configs": [
+    6,
+    7
+  ],
+  "capture_quality_policy": {
+    "min_packets": 1000,
+    "max_drop_rate": 0.02,
+    "require_effect": true
+  },
+  "benign_quality_policy": {
+    "min_benign_flows": 1000,
+    "min_successful_sessions": 50,
+    "min_success_rate": 0.9,
+    "require_benign_jsonl": true,
+    "require_browser_evidence": false
+  },
+  "required_labeling_policy": {
+    "use_failed": false,
+    "allow_empty": false,
+    "ambiguous_policy": "drop",
+    "allow_overlapping_windows": false,
+    "ignore_annotation_campaign": false,
+    "min_matches_per_event": 1,
+    "min_port_coverage": 0.8,
+    "require_ip_bytes": true,
+    "require_ssl_log": true,
+    "require_quic_log": true,
+    "min_ssl_join_rate": 0.8,
+    "min_quic_join_rate": 0.8,
+    "window_padding_ms": 0
+  },
+  "runs": {
+    "0": {
+      "config_id": 0,
+      "split": "train",
+      "seed": 0,
+      "day": "2026-08-04",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "userlist_sha256": "284f9c74099e852b744f0b7d7e4bbed2c8383c67c3735c7c955119e31da38d2d",
+      "passlist_sha256": "71ce528a00c4b14471b21fce807882ff14c7059b40da9a891f810e825bf1f127"
+    },
+    "1": {
+      "config_id": 1,
+      "split": "train",
+      "seed": 1,
+      "day": "2026-08-04",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "userlist_sha256": "284f9c74099e852b744f0b7d7e4bbed2c8383c67c3735c7c955119e31da38d2d",
+      "passlist_sha256": "71ce528a00c4b14471b21fce807882ff14c7059b40da9a891f810e825bf1f127"
+    },
+    "2": {
+      "config_id": 2,
+      "split": "train",
+      "seed": 2,
+      "day": "2026-08-04",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "userlist_sha256": "284f9c74099e852b744f0b7d7e4bbed2c8383c67c3735c7c955119e31da38d2d",
+      "passlist_sha256": "71ce528a00c4b14471b21fce807882ff14c7059b40da9a891f810e825bf1f127"
+    },
+    "3": {
+      "config_id": 3,
+      "split": "train",
+      "seed": 3,
+      "day": "2026-08-05",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "userlist_sha256": "284f9c74099e852b744f0b7d7e4bbed2c8383c67c3735c7c955119e31da38d2d",
+      "passlist_sha256": "71ce528a00c4b14471b21fce807882ff14c7059b40da9a891f810e825bf1f127"
+    },
+    "4": {
+      "config_id": 4,
+      "split": "validation",
+      "seed": 4,
+      "day": "2026-08-05",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "userlist_sha256": "284f9c74099e852b744f0b7d7e4bbed2c8383c67c3735c7c955119e31da38d2d",
+      "passlist_sha256": "71ce528a00c4b14471b21fce807882ff14c7059b40da9a891f810e825bf1f127"
+    },
+    "5": {
+      "config_id": 6,
+      "split": "test",
+      "seed": 5,
+      "day": "2026-08-05",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 180,
+      "timeout": 1800,
+      "userlist_sha256": "284f9c74099e852b744f0b7d7e4bbed2c8383c67c3735c7c955119e31da38d2d",
+      "passlist_sha256": "71ce528a00c4b14471b21fce807882ff14c7059b40da9a891f810e825bf1f127"
+    },
+    "6": {
+      "config_id": 7,
+      "split": "test",
+      "seed": 6,
+      "day": "2026-08-05",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 180,
+      "timeout": 900,
+      "userlist_sha256": "284f9c74099e852b744f0b7d7e4bbed2c8383c67c3735c7c955119e31da38d2d",
+      "passlist_sha256": "71ce528a00c4b14471b21fce807882ff14c7059b40da9a891f810e825bf1f127"
+    }
+  },
+  "max_cross_split_duplicate_rate": 0,
+  "required_min_window_overlap": 0.5,
+  "max_duration_fallback_rate": 0.1,
+  "release_quality_policy": {
+    "max_domain_auc": 0.7,
+    "min_domain_test_samples_per_class": 30,
+    "min_overall_realism_quality": "strong",
+    "max_mean_js": 0.25,
+    "max_cat_js": 0.25,
+    "max_cond_js": 0.3,
+    "max_missing_rate_difference": 0.15,
+    "min_tstr_reference_ratio": 0.8,
+    "min_reference_f1": 0.5
+  },
+  "_provenance_note": "This is the campaign manifest used for the seven released runs, with wordlist SHA-256 pins set to the wordlists shipped in config/wordlists/. All methodological parameters (splits, seeds, per-run attacks, effect requirement, durations, thresholds, release criteria) are the values actually used."
+}

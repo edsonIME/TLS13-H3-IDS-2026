@@ -1,0 +1,152 @@
+{
+  "campaign_id": "lab-pilot-2026-07",
+  "expected_labels": [
+    "BENIGN",
+    "PortScan",
+    "BruteForce",
+    "DoS"
+  ],
+  "reserved_test_configs": [
+    6,
+    7
+  ],
+  "_plan_note": "Per-run keys attacks/target_host/target_ip/dos_seconds/timeout PIN this run's plan; run_attacks --campaign derives them and the CLI may only CONFIRM (equal) them [audit 10]. This example sets wordlists_pinned:false so it loads without forcing a specific BruteForce wordlist; for a FULL BruteForce reproduction, drop wordlists_pinned and add userlist_sha256/passlist_sha256 with the sha256 of YOUR wordlists [audit v20.6 \u00a78].",
+  "_policy_note": "required_labeling_policy is the OFFICIAL labeling policy the campaign DEMANDS of every run's _run_status.json. merge/validate/evaluate reject (under --require-status) any run whose labeling_policy does not MEET it \u2014 a weak-policy run is NOT official, even with diagnostic=false [audit v19 P0-2]. Calibrate min_port_coverage / join rates to your methodology.",
+  "required_labeling_policy": {
+    "use_failed": false,
+    "allow_empty": false,
+    "ambiguous_policy": "drop",
+    "allow_overlapping_windows": false,
+    "ignore_annotation_campaign": false,
+    "min_matches_per_event": 1,
+    "min_port_coverage": 0.8,
+    "require_ip_bytes": true,
+    "require_ssl_log": true,
+    "require_quic_log": true,
+    "min_ssl_join_rate": 0.8,
+    "min_quic_join_rate": 0.8,
+    "window_padding_ms": 0
+  },
+  "runs": {
+    "0": {
+      "config_id": 0,
+      "split": "train",
+      "seed": 0,
+      "day": "2026-07-01",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "wordlists_pinned": false
+    },
+    "1": {
+      "config_id": 1,
+      "split": "train",
+      "seed": 1,
+      "day": "2026-07-02",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "wordlists_pinned": false
+    },
+    "2": {
+      "config_id": 2,
+      "split": "train",
+      "seed": 2,
+      "day": "2026-07-03",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "wordlists_pinned": false
+    },
+    "3": {
+      "config_id": 3,
+      "split": "train",
+      "seed": 3,
+      "day": "2026-07-04",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "wordlists_pinned": false
+    },
+    "4": {
+      "config_id": 4,
+      "split": "validation",
+      "seed": 4,
+      "day": "2026-07-05",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 120,
+      "timeout": 900,
+      "wordlists_pinned": false
+    },
+    "5": {
+      "config_id": 6,
+      "split": "test",
+      "seed": 5,
+      "day": "2026-07-06",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 180,
+      "timeout": 900,
+      "wordlists_pinned": false
+    },
+    "6": {
+      "config_id": 7,
+      "split": "test",
+      "seed": 6,
+      "day": "2026-07-07",
+      "attacks": [
+        "PortScan",
+        "BruteForce",
+        "DoS"
+      ],
+      "target_host": "blog.lab",
+      "target_ip": "10.10.10.11",
+      "attacker_ip": "10.10.10.30",
+      "dos_seconds": 180,
+      "timeout": 900,
+      "wordlists_pinned": false
+    }
+  },
+  "_pilot_note": "PILOT/diagnostic example: wordlists_pinned:false on every run, so any BruteForce package is DIAGNOSTIC (brute_force_wordlists_unpinned), never official. Use it to shake out the lab. For an OFFICIAL run use campaign.official.example.json. [audit v20.17 \u00a711.4]"
+}

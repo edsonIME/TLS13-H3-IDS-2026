@@ -1,0 +1,128 @@
+{
+  "run_id": 1,
+  "base_dir": "/mnt/nids-captures",
+  "src_dir": "/opt/nids/src",
+  "campaign": "campaign.json",
+  "interface": "enp2s0",
+  "overwrite": true,
+  "ready_timeout": 240,
+  "attack_timeout": 1800,
+  "src_dirs": {
+    "nb2": "<nb2-src-dir>"
+  },
+  "campaigns": {
+    "nb2": "<nb2-campaign-path>",
+    "nb3": "/opt/nids/campaign.json"
+  },
+  "remote_stage": "/tmp/nids_run0",
+  "stages": {
+    "nb2": "<nb2-stage-dir>"
+  },
+  "zeek_site_script": "/opt/nids/lab/zeek/local.zeek",
+  "durations": {
+    "warmup": 30,
+    "cooldown": 30,
+    "margin": 300,
+    "sustain": 3300,
+    "capture_cap": 3500,
+    "monitor_cap": 3500,
+    "benign_cap": 3500
+  },
+  "finalize_args": [
+    "--min-packets",
+    "1000",
+    "--max-drop-rate",
+    "0.02"
+  ],
+  "preflight_args_by_host": {
+    "nb1": [
+      "--campaign",
+      "/opt/nids/campaign.json",
+      "--resolve",
+      "blog.lab",
+      "--resolve",
+      "shop.lab",
+      "--https",
+      "https://blog.lab",
+      "--https",
+      "https://shop.lab",
+      "--no-clock-gate"
+    ],
+    "nb2": [
+      "--resolve",
+      "blog.lab",
+      "--resolve",
+      "shop.lab"
+    ],
+    "nb3": [
+      "--campaign",
+      "/opt/nids/campaign.json",
+      "--wordlist-dir",
+      "/opt/nids/wordlists"
+    ],
+    "nb4": [
+      "--interface",
+      "enp2s0",
+      "--disk-path",
+      "/mnt/nids-captures",
+      "--min-disk-gb",
+      "20",
+      "--require-air-gap",
+      "--zeek-site-script",
+      "/opt/nids/lab/zeek/local.zeek"
+    ]
+  },
+  "monitor_urls": [
+    "https://blog.lab",
+    "https://shop.lab"
+  ],
+  "monitor_interval": 2.0,
+  "runners": {
+    "nb1": {
+      "kind": "ssh",
+      "target": "<user>@<nb1-host>",
+      "key": "<path-to-ssh-key>"
+    },
+    "nb2": {
+      "kind": "windows",
+      "target": "<user>@<nb2-host>",
+      "python": "<python-exe-path>"
+    },
+    "nb3": {
+      "kind": "ssh",
+      "target": "<user>@<nb3-host>"
+    },
+    "nb4": {
+      "kind": "local"
+    }
+  },
+  "attack_args": [
+    "--userlist",
+    "/opt/nids/wordlists/users.txt",
+    "--passlist",
+    "/opt/nids/wordlists/passwords.txt"
+  ],
+  "label_args": [
+    "--min-port-coverage",
+    "0.8",
+    "--require-ip-bytes",
+    "--require-ssl-log",
+    "--require-quic-log",
+    "--min-ssl-join-rate",
+    "0.8",
+    "--min-quic-join-rate",
+    "0.8",
+    "--min-matches-per-event",
+    "1",
+    "--ambiguous-policy",
+    "drop",
+    "--window-padding-ms",
+    "0",
+    "--min-window-overlap",
+    "0.5"
+  ],
+  "capture_args": [
+    "--filter",
+    "host 10.10.10.11 and (tcp or udp) and not host 10.10.10.4"
+  ]
+}

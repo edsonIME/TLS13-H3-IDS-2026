@@ -1,0 +1,43 @@
+# Caddy config for the lab victims. TLS 1.3 is FORCED (min == max == tls1.3);
+# HTTP/1.1, HTTP/2 and HTTP/3 are all offered so browsers can negotiate h3.
+# The cert (blog.crt) carries SANs blog.lab AND shop.lab, so it serves both.
+#
+# JSON access logs are ENABLED so an attack can be confirmed at the APPLICATION
+# layer, not just "the tool ran" [audit 11]. After a run, correlate:
+#   * Hydra BruteForce  -> POSTs to /wp-login.php (count, status 200/401/302)
+#   * benign login      -> the same path, but far fewer requests
+#   * SlowHTTPTest DoS   -> many concurrent GET / with long-held connections
+# Mount a volume at /var/log/caddy in docker-compose to persist these files, and
+# store request_count / status breakdown next to the ground-truth annotations as
+# `application_observed` evidence.
+{
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+(accesslog) {
+	log {
+		output file /var/log/caddy/{args[0]}.access.json {
+			roll_size 100mb
+			roll_keep 10
+		}
+		format json
+	}
+}
+
+blog.lab {
+	import accesslog blog
+	tls /certs/blog.crt /certs/blog.key {
+		protocols tls1.3 tls1.3
+	}
+	reverse_proxy wordpress:80
+}
+
+shop.lab {
+	import accesslog shop
+	tls /certs/blog.crt /certs/blog.key {
+		protocols tls1.3 tls1.3
+	}
+	reverse_proxy wordpress2:80
+}

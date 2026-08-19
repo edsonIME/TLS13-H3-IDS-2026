@@ -1,0 +1,2 @@
+subjectAltName=DNS:blog.lab,DNS:shop.lab
+extendedKeyUsage=serverAuth
