@@ -8,9 +8,9 @@ authors:
     affiliation: "Instituto Militar de Engenharia (IME), Rio de Janeiro, Brazil"
     orcid: "https://orcid.org/0009-0008-3405-0192"
 # Dataset DOI (Zenodo) — fill in after the Zenodo deposit is published:
-# doi: "10.5281/zenodo.<FILL-IN>"
+# doi: "10.5281/zenodo.22033368"
 version: "1.0.0"
-date-released: "2026-08-<DD>"   # fill in the release date
+date-released: "2026-08-31"   
 license: CC-BY-4.0              # data license; the code is released separately (see LICENSE)
 keywords:
   - "network intrusion detection"
