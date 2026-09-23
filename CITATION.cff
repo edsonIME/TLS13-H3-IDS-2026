@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this dataset or its generation pipeline, please cite the following."
-title: "TLS13-H3-IDS-2026: A Labelled Network Intrusion-Detection Dataset over TLS 1.3 and HTTP/3 with a Released Generation Pipeline"
+title: "TLS13-H3-IDS-2026: A Controlled and Reproducible Baseline Dataset for Intrusion Detection Over TLS 1.3 and HTTP/3 With Effect-Verified DoS Ground Truth"
 type: dataset
 authors:
   - family-names: "Barbosa de Souza"
