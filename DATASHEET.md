@@ -177,10 +177,7 @@ network reconnaissance (nmap, paced to a bounded scan rate), application-
 layer credential brute-forcing (hydra against the HTTPS login form on
 port 443), and HTTP-flooding denial-of-service. The DoS appears on both
 transports in the released flows (17,535 TCP and 5,460 QUIC/HTTP-3), so it
-is not an HTTP/3-only flood. *Provenance note: the attack-generation code in
-this repository currently emits the DoS over HTTP/3 (QUIC) only; the exact
-generator that produced the released TCP+QUIC DoS mix is being reconciled
-into the repository so the published pipeline reproduces these flows.*
+is not an HTTP/3-only flood. 
 
 **Effect-verified ground truth.**
 A denial-of-service label is confirmed only against an **independently
