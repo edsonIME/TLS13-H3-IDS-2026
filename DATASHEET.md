@@ -71,7 +71,7 @@ form produces few distinct flows relative to volumetric attacks. This
 imbalance is a property of the phenomenon and is reported honestly rather
 than resampled away.
 
-**Transport distribution (corrected 2026-10-25):**
+**Transport distribution:**
 
 | Class | TCP | QUIC (UDP) | Total |
 |---|---:|---:|---:|
@@ -166,7 +166,16 @@ the cap is exceeded. See *Collection Process*.
 > counts exactly (22,995 / 14,812 / 394). Per run (time+port rule, benign
 > records mislabelled DoS / PortScan / BruteForce): run 0: 140 / 14 / 10;
 > run 1: 95 / 0 / 9; run 2: 152 / 57 / 2; run 3: 160 / 0 / 4; run 4: 169 / 25 / 6;
-> run 5: 97 / 3,666 / 4; run 6: 93 / 0 / 7.
+> run 5: 97 / 3,666 / 4; run 6: 93 / 0 / 7. Population: the 114,667 records are
+> every `conn.log` record with the benign host as originator and the victim as
+> responder. Itemised by originator and responder from the audit tables
+> (`benign_population.py`, shipped), the released BENIGN class (114,992 flows)
+> consists of exactly these 114,667 records (10.10.10.20 → 10.10.10.11), the 324
+> attacker-host records outside every window (10.10.10.30 → 10.10.10.11, kept
+> BENIGN by outcome i) and one multicast record from the victim host
+> (10.10.10.11 → 224.0.0.251, mDNS, run 3); every attack-labelled flow
+> (22,995 DoS, 14,812 PortScan, 394 BruteForce) has the attacker as originator
+> and the victim as responder.
 
 **Is the dataset self-contained?**
 The released tables are self-contained. The **generation pipeline** is
