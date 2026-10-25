@@ -101,16 +101,6 @@ BENIGN/PortScan/BruteForce on TCP) and, given that a flow is malicious, its tran
 determines whether it is the flood or one of the two TCP attacks. Cramér's V for class
 against transport, recomputed from the released tables, is 0.5252.
 
-> **Correction notice (2026-10-25).** Earlier versions of this datasheet reported
-> 17,535 TCP and 5,460 QUIC DoS flows and stated that "neither transport isolates a
-> single class". That split was a tabulation error: every DoS window of the seven
-> official runs is `udp/443`, and every one of the 22,995 DoS flows has Zeek
-> `proto = udp` and `transport = UDP` in the per-run tables, in the labeller audit
-> tables and in the released split tables. The Cramér's V of 0.5252 reported alongside
-> the old split is reproduced only by the corrected table (the old split would give
-> 0.2597). The within-transport evaluation always used the corrected composition (see
-> *Artefact identities* under *Preprocessing* and *Multiclass reference evaluation*
-> under *Uses*).
 
 **What features does each instance have?**
 89 features plus `label`. Seven of the features are strong or
@@ -160,6 +150,23 @@ the cap is exceeded. See *Collection Process*.
 > inspected, so this verifies the observable consequence of the assumption (no
 > unattributed traffic reached any service other than DNS and NTP), not the
 > assumption itself. No class tie occurred.
+
+> **What provenance attribution prevented (window-labelling counterfactual).**
+> Benign generation runs for the whole 2,700 s capture, so benign flows fall
+> inside every attack window. Re-deriving two window-only rules over the same
+> sealed `conn.log` and annotations (`window_counterfactual.py`, shipped): a
+> time-only rule would have labelled 8,578 of the 114,667 benign-host→victim
+> records as attacks (2,387 DoS, 6,133 PortScan, 58 BruteForce), and a
+> time-plus-protocol/port rule 4,710 (906 DoS, 3,762 PortScan, 42 BruteForce) —
+> one in five of the resulting PortScan labels and one in ten of the BruteForce
+> labels would have been benign, almost all of the scan mislabels (3,666)
+> falling inside the 1,231 s slow scan of run 5 (configuration 6, `-T2`). The
+> released provenance rule keeps all of them BENIGN; under the same
+> time-plus-port rule the attacker's records reproduce the released attack
+> counts exactly (22,995 / 14,812 / 394). Per run (time+port rule, benign
+> records mislabelled DoS / PortScan / BruteForce): run 0: 140 / 14 / 10;
+> run 1: 95 / 0 / 9; run 2: 152 / 57 / 2; run 3: 160 / 0 / 4; run 4: 169 / 25 / 6;
+> run 5: 97 / 3,666 / 4; run 6: 93 / 0 / 7.
 
 **Is the dataset self-contained?**
 The released tables are self-contained. The **generation pipeline** is
