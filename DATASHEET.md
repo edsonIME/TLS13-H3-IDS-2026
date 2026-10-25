@@ -102,6 +102,7 @@ determines whether it is the flood or one of the two TCP attacks. Cramér's V fo
 against transport, recomputed from the released tables, is 0.5252.
 
 
+
 **What features does each instance have?**
 89 features plus `label`. Seven of the features are strong or
 protocol-identifying attributes — `ja3`, `ja3s`, `dst_port_class`,
@@ -159,8 +160,12 @@ the cap is exceeded. See *Collection Process*.
 > records as attacks (2,387 DoS, 6,133 PortScan, 58 BruteForce), and a
 > time-plus-protocol/port rule 4,710 (906 DoS, 3,762 PortScan, 42 BruteForce) —
 > one in five of the resulting PortScan labels and one in ten of the BruteForce
-> labels would have been benign, almost all of the scan mislabels (3,666)
-> falling inside the 1,231 s slow scan of run 5 (configuration 6, `-T2`). The
+> labels would have been benign. The effect is concentrated in run 5, whose
+> 1,231 s slow scan (configuration 6, `-T2`) holds 3,666 of the 3,762 false
+> PortScan labels (97.4 %) and 3,767 of the 4,710 time+port mislabels (80.0 %);
+> over the other six runs the time+port mislabel rate is 943 / 98,459 = 0.96 %
+> and the time-only rate 2,300 / 98,459 = 2.34 %, against 4.11 % and 7.48 % over
+> all seven runs. The
 > released provenance rule keeps all of them BENIGN; under the same
 > time-plus-port rule the attacker's records reproduce the released attack
 > counts exactly (22,995 / 14,812 / 394). Per run (time+port rule, benign
