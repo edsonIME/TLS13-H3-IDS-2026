@@ -37,7 +37,7 @@ Project overview: build an intrusion-detection dataset for **modern encrypted tr
 |---|---|---|
 | `docker-compose.yml` | NB1 | Victims: 2× WordPress (`blog.lab` + `shop.lab`) + MariaDB + Caddy |
 | `Caddyfile` | NB1 | **Enforces TLS 1.3** + HTTP/3; serves `blog.lab` and `shop.lab` |
-| `benign_traffic.py` | NB2 | Real benign browsing (Selenium) on `blog.lab` / `shop.lab` |
+| `benign_traffic.py` | NB2 | Thin wrapper that drives the scripted non-browser client suite (`benign_clients.py`: aioquic-h3, httpx, requests, session variants) against `blog.lab` / `shop.lab` |
 | `requirements.txt` | any | Python dependencies (`pip install -r requirements.txt`) |
 
 ## Laboratory Automation (Capture / Orchestration) [audit v20.26]
@@ -49,7 +49,7 @@ The **automation layer** wraps the analytical pipeline (it does **not** reimplem
 | `preflight.py` | NB1–NB4 | Checks the laboratory **before** each run (tools, disk, DNS, HTTPS, clock, interface, air-gap, **wordlist hashes** vs manifest, manifest loading) → `preflight_run<N>.json`; execution continues only on **PASS** |
 | `capture_run.py` | NB4 | Controls `tcpdump`, stores the PID, monitors the PCAP, terminates cleanly, and **seals** capture statistics (received/dropped) + SHA-256 (`--simulate` allows testing without `CAP_NET_RAW`) |
 | `process_pcap.py` | NB4 | Runs **Zeek** on the PCAP, verifies `conn/ssl/quic.log` (existence and non-empty), counts records and hashes; `--check-env` validates Zeek/JA3/QUIC support beforehand |
-| `service_monitor.py` | NB1 | Samples victim services during the run (availability/latency/HTTP codes + CPU/memory/containers) → CSV/JSON — the **effect evidence** for the DoS class |
+| `service_monitor.py` | NB4 | Probes the victim services on NB1 (`blog.lab` target, `shop.lab` control) during the run for availability/latency/HTTP codes → CSV/JSON — the **effect evidence** for the DoS class; the CPU/memory/container columns describe the host the monitor runs on (NB4), not the victim |
 | `clock_evidence.py` | NB1–NB4 | Collects clock-synchronisation evidence (`chronyc` / `w32tm` / `timedatectl`) by phase (start/end) |
 | `finalize_run.py` | NB4 | Verifies required files, validates status (`status/v5`), inventories + hashes artifacts, packages `run<N>_bundle.tar.gz`; `--verify` detects subsequent modification |
 | `orchestrate_run.py` | admin/NB3/NB4 | State machine for **one run** (preflight → clocks → capture → attacks → Zeek → label → finalize) through local/SSH `Runner`; **aborts** on required-step failure; `--dry-run` tests the flow without modifying hosts |
